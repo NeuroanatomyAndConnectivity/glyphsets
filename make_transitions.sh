@@ -68,6 +68,29 @@ cmd="$workbench -cifti-correlation-gradient ${mydir}/${1}/rfMRI_REST.corr.nii ${
 echo $cmd
 $cmd
 
+cmd="$workbench -cifti-separate ${mydir}/${1}/rfMRI_gradient.dscalar.nii \
+	COLUMN -metric CORTEX_LEFT ${mydir}/${1}/rfMRI_gradient.L.metric \
+	-metric CORTEX_RIGHT ${mydir}/${1}/rfMRI_gradient.R.metric"
+echo $cmd
+$cmd
+
+for HEMI in L R; do
+	cmd="$workbench -metric-convert -to-nifti \
+		${mydir}/${1}/rfMRI_gradient.${HEMI}.metric \
+		${mydir}/${1}/rfMRI_gradient.${HEMI}.nii"
+	echo $cmd
+	$cmd
+
+	cmd="3dmaskdump -noijk ${mydir}/${1}/rfMRI_gradient.${HEMI}.nii \
+		> ${mydir}/${1}/rfMRI_gradient.${HEMI}.1D"
+	echo $cmd
+	$cmd
+
+	cmd="rm ${mydir}/${1}/rfMRI_gradient.${HEMI}.metric"
+	echo $cmd
+	$cmd
+done
+
 ## Calculate gradient of gradient	
 cmd="$workbench -cifti-gradient ${mydir}/${1}/rfMRI_gradient.dscalar.nii COLUMN \
 	${mydir}/${1}/rfMRI_gradient2.dscalar.nii \
