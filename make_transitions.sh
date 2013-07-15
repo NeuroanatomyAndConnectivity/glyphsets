@@ -55,7 +55,15 @@ $cmd
 cmd="$workbench -cifti-math 'tanh(z)' ${mydir}/${1}/rfMRI_REST.corr.nii -var z ${mydir}/${1}/rfMRI_REST_z.corr.nii"
 echo $cmd
 $cmd
-rm -f ${mydir}/${1}/rfMRI_REST_z.corr.nii
+
+## Remove unnecessary and large corelation files
+cmd="rm -f ${mydir}/${1}/rfMRI_REST_z.corr.nii \
+	${mydir}/${1}/rfMRI_REST1_RL.corr.nii \
+	${mydir}/${1}/rfMRI_REST1_LR.corr.nii \
+	${mydir}/${1}/rfMRI_REST2_RL.corr.nii \
+	${mydir}/${1}/rfMRI_REST2_LR.corr.nii"
+echo $cmd
+$cmd
 
 ## Calculate gradient
 cmd="$workbench -cifti-correlation-gradient ${mydir}/${1}/rfMRI_REST.corr.nii ${mydir}/${1}/rfMRI_gradient.dscalar.nii \
@@ -68,8 +76,8 @@ cmd="$workbench -cifti-correlation-gradient ${mydir}/${1}/rfMRI_REST.corr.nii ${
 echo $cmd
 $cmd
 
-cmd="$workbench -cifti-separate ${mydir}/${1}/rfMRI_gradient.dscalar.nii \
-	COLUMN -metric CORTEX_LEFT ${mydir}/${1}/rfMRI_gradient.L.metric \
+cmd="$workbench -cifti-separate ${mydir}/${1}/rfMRI_gradient.dscalar.nii COLUMN \
+	-metric CORTEX_LEFT ${mydir}/${1}/rfMRI_gradient.L.metric \
 	-metric CORTEX_RIGHT ${mydir}/${1}/rfMRI_gradient.R.metric"
 echo $cmd
 $cmd
@@ -86,7 +94,8 @@ for HEMI in L R; do
 	echo $cmd
 	$cmd
 
-	cmd="rm ${mydir}/${1}/rfMRI_gradient.${HEMI}.metric"
+	cmd="rm ${mydir}/${1}/rfMRI_gradient.${HEMI}.metric \
+		${mydir}/${1}/rfMRI_gradient.${HEMI}.nii "
 	echo $cmd
 	$cmd
 done
