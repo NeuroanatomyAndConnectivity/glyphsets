@@ -7,22 +7,22 @@
 ss=3 	# surface-presmooth 
 vs=3 	# volume-presmooth
 se=10 	# surface-exclude  
-ml=10 	# mem-limit 
+ml=80 	# mem-limit 
 
 ## this needs to point at the human connectome workbench commandline program
-workbench=wb_command
+workbench=/SCR/connectome_wb/workbench/bin_linux64/wb_command
 
 ## this needs to point at the directory where the HCP data is
 datadir=/a/documents/gorgolewski
 
 ## the directory where the sets get created
-mydir=/SCR2/data/hcp
+mydir=/SCR/margulies/hcp
 mkdir ${mydir}/${1}
 
 ## surfaces in freesurfer
 ## requires AFNI for the gifti_tool:
 for HEMI in R L; do
-	for SURF in pial inflated very\ inflated sphere midthickness; do
+	for SURF in pial inflated sphere midthickness; do
 		cmd="gifti_tool -infiles ${datadir}/${1}/MNINonLinear/fsaverage_LR32k/${1}.${HEMI}.${SURF}.32k_fs_LR.surf.gii -write_asc ${mydir}/${1}/${HEMI}.${SURF}.asc"
 		echo $cmd
 		$cmd
