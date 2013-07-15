@@ -27,7 +27,7 @@ for HEMI in R L; do
 		echo $cmd
 		$cmd
 	done
-	cmd="gifti_tool -infiles ${datadir}/${1}/MNINonLinear/fsaverage_LR32k/${1}.${HEMI}.curvature.32k_fs_LR.shape.gii  -write_asc ${mydir}/${1}/${HEMI}.curvature.shape.asc"
+	cmd="gifti_tool -infiles ${datadir}/${1}/MNINonLinear/fsaverage_LR32k/${1}.${HEMI}.curvature.32k_fs_LR.shape.gii  -write_1D ${mydir}/${1}/${HEMI}.curvature.shape.1D"
 	echo $cmd
 	$cmd
 done 
