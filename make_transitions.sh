@@ -52,9 +52,8 @@ echo $cmd
 $cmd	
 	
 ## Transform r-to-z
-cmd="$workbench -cifti-math 'tanh(z)' ${mydir}/${1}/rfMRI_REST.corr.nii -var z ${mydir}/${1}/rfMRI_REST_z.corr.nii"
-echo $cmd
-$cmd
+$workbench -cifti-math 'tanh(z)' ${mydir}/${1}/rfMRI_REST.corr.nii \
+	-fixnan 0 -var z ${mydir}/${1}/rfMRI_REST_z.corr.nii
 
 ## Remove unnecessary and large corelation files
 cmd="rm -f ${mydir}/${1}/rfMRI_REST_z.corr.nii \
