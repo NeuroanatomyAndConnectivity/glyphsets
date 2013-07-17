@@ -45,36 +45,40 @@ done
 
 ## Averaging across four runs
 cmd="$workbench -cifti-average ${mydir}/${1}/rfMRI_REST_z.dconn.nii \
-	-cifti ${mydir}/${1}/rfMRI_REST1_RL.dconn.nii \
-	-cifti ${mydir}/${1}/rfMRI_REST1_LR.dconn.nii \
-	-cifti ${mydir}/${1}/rfMRI_REST2_RL.dconn.nii \
-	-cifti ${mydir}/${1}/rfMRI_REST2_LR.dconn.nii"
+	-cifti ${mydir}/${1}/rfMRI_REST1_RL_z.dconn.nii \
+	-cifti ${mydir}/${1}/rfMRI_REST1_LR_z.dconn.nii \
+	-cifti ${mydir}/${1}/rfMRI_REST2_RL_z.dconn.nii \
+	-cifti ${mydir}/${1}/rfMRI_REST2_LR_z.dconn.nii"
 echo $cmd
 $cmd	
 	
 ## Transform r-to-z
-$workbench -cifti-math ' tanh(z) ' ${mydir}/${1}/rfMRI_REST.dconn.nii \
-	-fixnan 0 -var z ${mydir}/${1}/rfMRI_REST_z.dconn.nii
+#$workbench -cifti-math ' tanh(z) ' ${mydir}/${1}/rfMRI_REST.dconn.nii \
+#	-fixnan 0 -var z ${mydir}/${1}/rfMRI_REST_z.dconn.nii
 
 ## Remove unnecessary and large corelation files
-cmd="rm -f ${mydir}/${1}/rfMRI_REST_z.dconn.nii \
-	${mydir}/${1}/rfMRI_REST1_RL.dconn.nii \
-	${mydir}/${1}/rfMRI_REST1_LR.dconn.nii \
-	${mydir}/${1}/rfMRI_REST2_RL.dconn.nii \
-	${mydir}/${1}/rfMRI_REST2_LR.dconn.nii"
-echo $cmd
-$cmd
+#cmd="rm -f ${mydir}/${1}/rfMRI_REST_z.dconn.nii \
+#	${mydir}/${1}/rfMRI_REST1_RL.dconn.nii \
+#	${mydir}/${1}/rfMRI_REST1_LR.dconn.nii \
+#	${mydir}/${1}/rfMRI_REST2_RL.dconn.nii \
+#	${mydir}/${1}/rfMRI_REST2_LR.dconn.nii"
+#echo $cmd
+#$cmd
 
 ## Calculate gradient
-cmd="$workbench -cifti-gradient ${mydir}/${1}/rfMRI_REST.dconn.nii COLUMN \
-	${mydir}/${1}/rfMRI_gradient.dscalar.nii \
-	-left-surface ${datadir}/${1}/MNINonLinear/fsaverage_LR32k/${1}.L.midthickness.32k_fs_LR.surf.gii \
-	-right-surface ${datadir}/${1}/MNINonLinear/fsaverage_LR32k/${1}.R.midthickness.32k_fs_LR.surf.gii \
+cmd="$workbench -cifti-correlation-gradient ${mydir}/877168/rfMRI_REST_z.dconn.nii COLUMN \
+	${mydir}/877168/rfMRI_gradient.dscalar.nii \
+	-left-surface ${datadir}/877168/MNINonLinear/fsaverage_LR32k/877168.L.midthickness.32k_fs_LR.surf.gii \
+	-right-surface ${datadir}/877168/MNINonLinear/fsaverage_LR32k/877168.R.midthickness.32k_fs_LR.surf.gii \
 	-surface-presmooth ${ss} \
-	-volume-presmooth ${vs}"
+	-volume-presmooth ${vs} \
+	-undo-fisher-z \
+	-surface-exclude ${se} \
+	-mem-limit ${ml}"
 echo $cmd
 $cmd
 
+# Export gradient results
 cmd="$workbench -cifti-separate ${mydir}/${1}/rfMRI_gradient.dscalar.nii COLUMN \
 	-metric CORTEX_LEFT ${mydir}/${1}/rfMRI_gradient.L.metric \
 	-metric CORTEX_RIGHT ${mydir}/${1}/rfMRI_gradient.R.metric"
