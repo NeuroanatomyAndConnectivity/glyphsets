@@ -52,18 +52,13 @@ cmd="$workbench -cifti-average ${mydir}/${1}/rfMRI_REST_z.dconn.nii \
 echo $cmd
 $cmd	
 	
-## Transform r-to-z
-#$workbench -cifti-math ' tanh(z) ' ${mydir}/${1}/rfMRI_REST.dconn.nii \
-#	-fixnan 0 -var z ${mydir}/${1}/rfMRI_REST_z.dconn.nii
-
 ## Remove unnecessary and large corelation files
-#cmd="rm -f ${mydir}/${1}/rfMRI_REST_z.dconn.nii \
-#	${mydir}/${1}/rfMRI_REST1_RL.dconn.nii \
-#	${mydir}/${1}/rfMRI_REST1_LR.dconn.nii \
-#	${mydir}/${1}/rfMRI_REST2_RL.dconn.nii \
-#	${mydir}/${1}/rfMRI_REST2_LR.dconn.nii"
-#echo $cmd
-#$cmd
+cmd="rm -f ${mydir}/${1}/rfMRI_REST1_RL.dconn.nii \
+	${mydir}/${1}/rfMRI_REST1_LR.dconn.nii \
+	${mydir}/${1}/rfMRI_REST2_RL.dconn.nii \
+	${mydir}/${1}/rfMRI_REST2_LR.dconn.nii"
+echo $cmd
+$cmd
 
 ## Calculate gradient
 cmd="$workbench -cifti-correlation-gradient ${mydir}/877168/rfMRI_REST_z.dconn.nii COLUMN \
@@ -111,78 +106,4 @@ cmd="$workbench -cifti-gradient ${mydir}/${1}/rfMRI_gradient.dscalar.nii COLUMN 
 echo $cmd
 $cmd
 
-##################################################################################################################
-## Approach #2:
-cmd="$workbench \
-	-cifti-merge ${mydir}/${1}/rfMRI_REST_Atlas.dtseries.nii \
-	-cifti ${datadir}/${1}/MNINonLinear/Results/rfMRI_REST1_LR/rfMRI_REST1_LR_Atlas.dtseries.nii \
-	-cifti ${datadir}/${1}/MNINonLinear/Results/rfMRI_REST1_RL/rfMRI_REST1_RL_Atlas.dtseries.nii \
-	-cifti ${datadir}/${1}/MNINonLinear/Results/rfMRI_REST2_RL/rfMRI_REST2_RL_Atlas.dtseries.nii \
-	-cifti ${datadir}/${1}/MNINonLinear/Results/rfMRI_REST2_LR/rfMRI_REST2_LR_Atlas.dtseries.nii" 
-echo $cmd
-$cmd
-
-cmd="$workbench \
-	-cifti-correlation-gradient ${mydir}/${1}/rfMRI_REST_Atlas.dtseries.nii ${mydir}/${1}/rfMRI_gradient.dscalar.nii \
-	-left-surface ${datadir}/${1}/MNINonLinear/fsaverage_LR32k/${1}.L.midthickness.32k_fs_LR.surf.gii \
-	-right-surface ${datadir}/${1}/MNINonLinear/fsaverage_LR32k/${1}.R.midthickness.32k_fs_LR.surf.gii \
-	-surface-presmooth ${ss} \
-	-volume-presmooth ${vs} \
-	-surface-exclude ${se} \
-	-mem-limit ${ml}"
-echo $cmd
-$cmd
-
-cmd="$workbench -cifti-separate ${mydir}/${1}/rfMRI_gradient.dscalar.nii COLUMN \
-	-metric CORTEX_LEFT ${mydir}/${1}/rfMRI_gradient.L.metric \
-	-metric CORTEX_RIGHT ${mydir}/${1}/rfMRI_gradient.R.metric"
-echo $cmd
-$cmd
-
-for HEMI in L R; do
-	cmd="$workbench -metric-convert -to-nifti \
-		${mydir}/${1}/rfMRI_gradient.${HEMI}.metric \
-		${mydir}/${1}/rfMRI_gradient.${HEMI}.nii"
-	echo $cmd
-	$cmd
-
-	cmd="3dmaskdump -noijk ${mydir}/${1}/rfMRI_gradient.${HEMI}.nii \
-		> ${mydir}/${1}/rfMRI_gradient.${HEMI}.1D"
-	echo $cmd
-	$cmd
-
-	cmd="rm ${mydir}/${1}/rfMRI_gradient.${HEMI}.metric \
-		${mydir}/${1}/rfMRI_gradient.${HEMI}.nii "
-	echo $cmd
-	$cmd
-done
-
-
-##################################################################################################################
-## Approach #3:
-
-for REST in REST1 REST2; do
-	for PHASEDIR in RL LR; do
-
-	cmd="$workbench \
-	-cifti-correlation-gradient ${datadir}/${1}/MNINonLinear/Results/rfMRI_${REST}_${PHASEDIR}/rfMRI_${REST}_${PHASEDIR{_Atlas.dtseries.nii ${mydir}/${1}/rfMRI_gradient_${REST}_${PHASEDIR}.dscalar.nii \
-	-left-surface ${datadir}/${1}/MNINonLinear/fsaverage_LR32k/${1}.L.midthickness.32k_fs_LR.surf.gii \
-	-right-surface ${datadir}/${1}/MNINonLinear/fsaverage_LR32k/${1}.R.midthickness.32k_fs_LR.surf.gii \
-	-surface-presmooth ${ss} \
-	-volume-presmooth ${vs} \
-	-surface-exclude ${se} \
-	-mem-limit ${ml}"
-echo $cmd
-$cmd
-
-	done
-done
-
-cmd="$workbench -cifti-average ${mydir}/${1}/rfMRI_gradient_avg.dscalar.nii  \
-	-cifti ${mydir}/${1}/rfMRI_gradient_REST1_LR.dscalar.nii \
-	-cifti ${mydir}/${1}/rfMRI_gradient_REST1_RL.dscalar.nii \
-	-cifti ${mydir}/${1}/rfMRI_gradient_REST2_LR.dscalar.nii \
-	-cifti ${mydir}/${1}/rfMRI_gradient_REST2_RL.dscalar.nii"
-echo $cmd
-$cmd	
 
