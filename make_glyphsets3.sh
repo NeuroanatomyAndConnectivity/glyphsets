@@ -107,7 +107,7 @@ for REST in REST1 REST2; do
 	# -> correlation matrix cifti
 	cmd="$workbench -cifti-correlation \
 	${glyphsets}/$1/rfMRI_${REST}_${PHASEDIR}_left_metric.dtseries.nii \
-	${glyphsets}/$1/rfMRI_${REST}_${PHASEDIR}_left_corr.nii -fisher-z"
+	${glyphsets}/$1/rfMRI_${REST}_${PHASEDIR}_left_corr_z.nii -fisher-z"
 	echo $cmd
 	$cmd
 
@@ -116,18 +116,19 @@ done
 
 # averaging
 cmd="$workbench -cifti-average \
-${glyphsets}/$1/rfMRI_REST_left_corr.nii \
--cifti ${glyphsets}/$1/rfMRI_REST1_RL_left_corr.nii \
--cifti ${glyphsets}/$1/rfMRI_REST1_LR_left_corr.nii \
--cifti ${glyphsets}/$1/rfMRI_REST2_RL_left_corr.nii \
--cifti ${glyphsets}/$1/rfMRI_REST2_LR_left_corr.nii"
+${glyphsets}/$1/rfMRI_REST_left_corr_z.nii \
+-cifti ${glyphsets}/$1/rfMRI_REST1_RL_left_corr_z.nii \
+-cifti ${glyphsets}/$1/rfMRI_REST1_LR_left_corr_z.nii \
+-cifti ${glyphsets}/$1/rfMRI_REST2_RL_left_corr_z.nii \
+-cifti ${glyphsets}/$1/rfMRI_REST2_LR_left_corr_z.nii"
 echo $cmd
 $cmd
 
 # back to r
 $workbench -cifti-math 'tanh(z)' \
 ${glyphsets}/$1/rfMRI_REST_left_corr_avg.nii \
--var z ${glyphsets}/$1/rfMRI_REST_left_corr.nii
+-var z ${glyphsets}/$1/rfMRI_REST_left_corr_z.nii
+
 
 # converion to external binary gifti: header file + the binary matrix we want for braingl
 cmd="$workbench -cifti-convert -to-gifti-ext \
@@ -144,4 +145,38 @@ echo T1w_acpc_dc_restore_brain.nii.gz >> ${glyphsets}/$1/L.glyphset
 echo L.set >> ${glyphsets}/$1/L.glyphset
 # TODO: ROI, shifts against anatomical?
 echo rfMRI_REST_left_corr_avg.gii.data 0.5 1.0 >> ${glyphsets}/$1/L.glyphset
+
+
+####################################################################################
+# calculate gradients
+cp ${glyphsets}/$1/rfMRI_REST_left_corr_avg.nii ${glyphsets}/$1/rfMRI_REST_left_corr_avg.dconn.nii
+
+$workbench -cifti-gradient ${glyphsets}/$1/rfMRI_REST_left_corr_avg.dconn.nii COLUMN \
+	${glyphsets}/$1/rfMRI_REST_left_gradient.dscalar.nii
+	-left-surface ${datadir}/${1}/MNINonLinear/fsaverage_LR32k/${1}.L.midthickness.32k_fs_LR.surf.gii 
+	
+
+# Export gradient results
+# If this doesn't work, try using ROW instead of COLUMN
+cmd="$workbench -cifti-separate glyphsets/${1}/rfMRI_REST_left_gradient.dscalar.nii COLUMN \
+	-metric CORTEX_LEFT ${mydir}/${1}/rfMRI_gradient.L.metric"
+echo $cmd
+$cmd
+
+for HEMI in L; do
+	cmd="$workbench -metric-convert -to-nifti \
+		${mydir}/${1}/rfMRI_gradient.${HEMI}.metric \
+		${mydir}/${1}/rfMRI_gradient.${HEMI}.nii"
+	echo $cmd
+	$cmd
+
+	cmd="3dmaskdump -noijk ${mydir}/${1}/rfMRI_gradient.${HEMI}.nii \
+		> ${mydir}/${1}/rfMRI_gradient.${HEMI}.1D"
+	echo $cmd
+	$cmd
+
+	cmd="rm ${mydir}/${1}/rfMRI_gradient.${HEMI}.metric"
+	echo $cmd
+	$cmd
+done
 
