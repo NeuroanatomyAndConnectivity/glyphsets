@@ -151,9 +151,10 @@ echo rfMRI_REST_left_corr_avg.gii.data 0.5 1.0 >> ${glyphsets}/$1/L.glyphset
 # calculate gradients
 cp ${glyphsets}/$1/rfMRI_REST_left_corr_avg.nii ${glyphsets}/$1/rfMRI_REST_left_corr_avg.dconn.nii
 
-$workbench -cifti-gradient ${glyphsets}/$1/rfMRI_REST_left_corr_avg.dconn.nii COLUMN \
+$workbench -cifti-gradient ${glyphsets}/$1/rfMRI_REST_left_corr_avg.dconn.nii ROW \
 	${glyphsets}/$1/rfMRI_REST_left_gradient.dscalar.nii \
-	-left-surface ${datadir}/${1}/MNINonLinear/fsaverage_LR32k/${1}.L.midthickness.32k_fs_LR.surf.gii 
+	-left-surface ${datadir}/${1}/MNINonLinear/fsaverage_LR32k/${1}.L.midthickness.32k_fs_LR.surf.gii \
+	-average-output
 	
 
 # Export gradient results
