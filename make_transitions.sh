@@ -15,8 +15,8 @@ ml=80 	# mem-limit
 workbench=/SCR/connectome_wb/workbench/bin_linux64/wb_command
 
 ## this needs to point at the directory where the HCP data is
-datadir=/a/documents/gorgolewski
-
+datadir=/a/documents/connectome
+release="q1 q2"
 ## the directory where the sets get created
 mydir=/SCR/margulies/hcp
 mkdir ${mydir}/${1}
