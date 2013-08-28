@@ -11,8 +11,15 @@
 workbench=/scr/litauen1/workbench_0.82/bin_linux64/wb_command
 subName=${1}
 
+# new line
+
+
+# newer line
+
 # this needs to point at the directory where the HCP data is
 datadir=/a/documents/gorgolewski
+
+
 
 # the directory where the sets get created
 glyphsets=${2}
