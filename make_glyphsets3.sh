@@ -16,6 +16,8 @@ subName=${1}
 # this needs to point at the directory where the HCP data is
 datadir=/a/documents/gorgolewski
 
+
+
 # the directory where the sets get created
 glyphsets=${2}
 mkdir ${glyphsets}/${subName}
