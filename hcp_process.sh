@@ -1,0 +1,483 @@
+#!/bin/bash
+
+usage="
+$(basename "$0") [-h] -- a script for processing HCP data
+
+where:
+    -h  show this help text
+		-k	specific location of wb_command [default: /scr/liberia1/connectome_wb/workbench/bin_linux64/wb_command]
+    -d  directory for hcp data [default: /a/documents/connectome/]
+		-w	working directory for outputting results [default: /scr/kansas1/margulies/hcp]
+		-r  release [example: q1 or q2]
+		-p	preprocess data
+		-g	output glyphsets for use in braingl
+		-t	output transition maps [options: averageCorr, averageTrans]
+		-T	output transition map of transition maps
+		-K	process transition for NKI_Enhanced data
+		-c	output connectivity matrices	
+		-x	remove all files expect specified final outputs
+		-s 	subject name
+		"
+if [ -z "$1" ]; then 
+    echo "${usage}"
+    exit
+fi
+
+# Defaults:
+workbench=/scr/liberia1/connectome_wb/workbench/bin_linux64/wb_command
+
+### TO DO: Insert following variables into options above
+ss=4 	# surface-presmooth 
+vs=4 	# volume-presmooth
+se=10 	# surface-exclude 
+ve=10   # volume-exclude
+ml=40 	# mem-limit 
+
+while getopts ':hkdwrpcgtTcxs:' option; do
+  case "$option" in
+    h) 	echo "$usage"
+       	exit
+       	;;
+		k) workbench=$OPTARG
+    d) 	dir=$OPTARG
+       	;;
+		w) 	workingDir=$OPTARG
+				;;
+		r)	datadir=${dir}/$OPTARG
+		p)	echo "Preprocessing"
+				preprocessing
+		c) 	echo "Creating connectivity matrix"
+				connectivity
+		g)	echo "Creating glyphsets"
+				glyphsets
+		t)	echo "Creating transition maps"
+				trans_order=$OPTARG
+				transition
+		T)	echo "Creating second transition maps"
+				transition_second
+		K)	echo "Creating transition maps for NKI_Enhanced data"
+						transition_nki
+		x)	echo "removing unnecessary files"
+				cleanup
+		s)	echo "processing subject: $OPTARG"
+				sub=$OPTARG
+    :) 	printf "missing argument for -%s\n" "$OPTARG" >&2
+       	echo "$usage" >&2
+       	exit 1
+       	;;
+   \?) 	printf "illegal option: -%s\n" "$OPTARG" >&2
+       	echo "$usage" >&2
+       	exit 1
+       	;;
+	esac
+done
+shift $((OPTIND - 1))
+
+## the directory where the sets get created
+if [ ! -d ${workingDir}/${sub} ]; then
+	mkdir ${workingDir}/${sub}
+fi
+
+##########################################################
+preprocessing(){
+	for REST in REST1 REST2; do
+		for PHASE in RL LR; do
+			for HEMI in LEFT RIGHT; do
+				## Preprocessing:
+				# cifti -> metric
+				if [ ! -f ${workingDir}/${1}/rfMRI_${REST}_${PHASE}_Atlas.dtseries.${HEMI}.metric.gii ]; then 
+				cmd="$workbench -cifti-separate \
+					${datadir}/${1}/MNINonLinear/Results/rfMRI_${REST}_${PHASE}/rfMRI_${REST}_${PHASE}_Atlas.dtseries.nii \
+					COLUMN \
+					-metric CORTEX_${HEMI} \
+					${workingDir}/${1}/rfMRI_${REST}_${PHASE}_Atlas.dtseries.${HEMI}.metric.gii"
+				echo $cmd; $cmd; fi
+				# metric -> nifti
+				if [ ! -f ${workingDir}/${1}/rfMRI_${REST}_${PHASE}_Atlas.dtseries.${HEMI}.metric.nii ]; then 
+				cmd="$workbench -metric-convert -to-nifti \
+					${workingDir}/${1}/rfMRI_${REST}_${PHASE}_Atlas.dtseries.${HEMI}.metric.gii \
+					${workingDir}/${1}/rfMRI_${REST}_${PHASE}_Atlas.dtseries.${HEMI}.metric.nii"
+				echo $cmd; $cmd; fi
+				# regress out movement and bandpass filter
+				if [ ! -f ${workingDir}/${1}/rfMRI_${REST}_${PHASE}_Atlas.dtseries.${HEMI}.metric.preproc.nii ]; then 
+				cp ${datadir}/${1}/MNINonLinear/Results/rfMRI_${REST}_${PHASE}/Movement_Regressors.txt \
+					${workingDir}/${1}/rfMRI_${REST}_${PHASE}_Movement_Regressors.1D
+				cp ${datadir}/${1}/MNINonLinear/Results/rfMRI_${REST}_${PHASE}/Movement_Regressors_dt.txt \
+					${workingDir}/${1}/rfMRI_${REST}_${PHASE}_Movement_Regressors_dt.1D
+				cmd="3dBandpass -ort ${workingDir}/${1}/rfMRI_${REST}_${PHASE}_Movement_Regressors.1D \
+					-ort ${workingDir}/${1}/rfMRI_${REST}_${PHASE}_Movement_Regressors.1D \
+					-prefix ${workingDir}/${1}/rfMRI_${REST}_${PHASE}_Atlas.dtseries.${HEMI}.metric.preproc.1D \
+					-dt 0.720 -band 0.01 0.1 \
+					${workingDir}/${1}/rfMRI_${REST}_${PHASE}_Atlas.dtseries.${HEMI}.metric.nii"
+				echo $cmd; $cmd
+				cmd="3dAFNItoNIFTI -prefix ${workingDir}/${1}/rfMRI_${REST}_${PHASE}_Atlas.dtseries.${HEMI}.metric.preproc.nii \
+					${workingDir}/${1}/rfMRI_${REST}_${PHASE}_Atlas.dtseries.${HEMI}.metric.preproc.1D"
+				echo $cmd; $cmd; fi
+
+				if [ ${HEMI}="LEFT" ]; then
+					surfHEMI="L"
+				elif [ ${HEMI}="RIGHT" ]; then
+					surfHEMI="R" 
+				fi
+				# conversion back to metric
+				if [ ! -f ${workingDir}/${1}/rfMRI_${REST}_${PHASE}_Atlas.dtseries.${HEMI}.metric.preproc.gii ]; then 
+				cmd="$workbench -metric-convert -from-nifti \
+					${workingDir}/${1}/rfMRI_${REST}_${PHASE}_Atlas.dtseries.${HEMI}.metric.preproc.nii \
+					${datadir}/${1}/MNINonLinear/fsaverage_LR32k/${1}.${surfHEMI}.pial.32k_fs_LR.surf.gii \
+					${workingDir}/${1}/rfMRI_${REST}_${PHASE}_Atlas.dtseries.${HEMI}.metric.preproc.gii"
+				echo $cmd; $cmd; fi
+			done
+
+			# -> dense data series cifti
+			if [ ! -f ${workingDir}/${1}/rfMRI_${REST}_${PHASE}_preproc.dtseries.nii ]; then
+			cmd="$workbench -cifti-create-dense-timeseries \
+				${workingDir}/${1}/rfMRI_${REST}_${PHASE}_preproc.dtseries.nii \
+				-left-metric ${workingDir}/${1}/rfMRI_${REST}_${PHASE}_Atlas.dtseries.LEFT.metric.preproc.gii \
+				-right-metric ${workingDir}/${1}/rfMRI_${REST}_${PHASE}_Atlas.dtseries.RIGHT.metric.preproc.gii"
+			echo $cmd; $cmd; fi
+			
+			# Spatial smoothing at 4mm/2.355 = sigma
+			if [ ! -f ${workingDir}/${1}/rfMRI_${REST}_${PHASE}_preproc.ss.dtseries.nii ]; then
+			sigmaSurf=1.699 #$((${ss}/2.3548))
+			sigmaVol=1.699 #$((${vs}/2.3548))
+			cmd="$workbench -cifti-smoothing ${workingDir}/${1}/rfMRI_${REST}_${PHASE}_preproc.dtseries.nii \
+				${sigmaSurf} ${sigmaVol} COLUMN \
+				${workingDir}/${1}/rfMRI_${REST}_${PHASE}_preproc.ss.dtseries.nii
+				-left-surface ${datadir}/${1}/MNINonLinear/fsaverage_LR32k/${1}.L.pial.32k_fs_LR.surf.gii \
+				-right-surface ${datadir}/${1}/MNINonLinear/fsaverage_LR32k/${1}.R.pial.32k_fs_LR.surf.gii \
+				-fix-zeros-surface"
+				#-fix-zeros-volume \
+			echo $cmd; $cmd; fi
+		done
+	done
+}
+
+connectivity(){
+	for REST in REST1 REST2; do
+		for PHASE in RL LR; do
+			if [ ! -f ${workingDir}/${1}/rfMRI_REST.dconn.nii ]; then
+			if [ ! -f ${workingDir}/${1}/rfMRI_${REST}_${PHASE}.dconn.nii ]; then 
+			cmd="$workbench -cifti-correlation \
+				${workingDir}/${1}/rfMRI_${REST}_${PHASE}_preproc.ss.dtseries.nii \
+				${workingDir}/${1}/rfMRI_${REST}_${PHASE}.z.dconn.nii \
+				-fisher-z \
+				-mem-limit ${ml}"
+				#-roi-override
+				#-left-roi ${datadir}/${1}/MNINonLinear/fsaverage_LR32k/${1}.L.atlasroi.32k_fs_LR.shape.gii \
+				#-right-roi ${datadir}/${1}/MNINonLinear/fsaverage_LR32k/${1}.R.atlasroi.32k_fs_LR.shape.gii \
+		
+			echo $cmd; $cmd; fi; fi
+		done
+	done
+	
+	## Averaging across four runs
+	if [ ! -f ${workingDir}/${1}/rfMRI_REST.dconn.nii ]; then
+	if [ ! -f ${workingDir}/${1}/rfMRI_REST_z_dconn.nii ]; then 
+	cmd="$workbench -cifti-average ${workingDir}/${1}/rfMRI_REST_z.dconn.nii \
+		-cifti ${workingDir}/${1}/rfMRI_REST1_RL.z.dconn.nii \
+		-cifti ${workingDir}/${1}/rfMRI_REST1_LR.z.dconn.nii \
+		-cifti ${workingDir}/${1}/rfMRI_REST2_RL.z.dconn.nii \
+		-cifti ${workingDir}/${1}/rfMRI_REST2_LR.z.dconn.nii"
+	echo $cmd; $cmd; fi; fi
+
+	## Transform z-to-r
+	if [ ! -f ${workingDir}/${1}/rfMRI_REST.dconn.nii ]; then 
+	$workbench -cifti-math 'tanh(z)' ${workingDir}/${1}/rfMRI_REST.dconn.nii \
+		-fixnan 0 -var z ${workingDir}/${1}/rfMRI_REST_z.dconn.nii 
+	fi
+	
+}
+
+glyphsets(){
+	## surfaces in freesurfer
+	## requires AFNI for the gifti_tool: 
+	for HEMI in R L; do
+		for SURF in pial inflated sphere midthickness; do
+			if [ ! -f ${workingDir}/${1}/${HEMI}.${SURF}.asc ]; then
+			cmd="gifti_tool -infiles ${datadir}/${1}/MNINonLinear/fsaverage_LR32k/${1}.${HEMI}.${SURF}.32k_fs_LR.surf.gii -write_asc ${workingDir}/${1}/${HEMI}.${SURF}.asc"
+			echo $cmd; $cmd; fi
+		done
+		for SHAPE in sulc curvature corrThickness thickness; do
+			if [ ! -f ${workingDir}/${1}/${HEMI}.${SHAPE}.shape.1D ]; then 
+			cmd="gifti_tool -infiles \
+				${datadir}/${1}/MNINonLinear/fsaverage_LR32k/${1}.${HEMI}.${SHAPE}.32k_fs_LR.shape.gii  \
+				-write_1D ${workingDir}/${1}/${HEMI}.${SHAPE}.shape.1D"
+			echo $cmd; $cmd; fi
+		done
+	done 
+	
+	preprocess
+	
+	correlation
+}
+
+transition(){
+	
+	preprocess
+	
+	if [ trans_order="averageConn"; then
+		## Calculate gradient
+		if [ ! -f ${workingDir}/${1}/rfMRI_gradient.dscalar.nii ]; then 
+		connectivity
+		
+		cmd="$workbench -cifti-gradient ${workingDir}/${1}/rfMRI_REST.dconn.nii ROW ${workingDir}/${1}/rfMRI_gradient.dscalar.nii \
+			-left-surface ${datadir}/${1}/MNINonLinear/fsaverage_LR32k/${1}.L.midthickness.32k_fs_LR.surf.gii \
+			-right-surface ${datadir}/${1}/MNINonLinear/fsaverage_LR32k/${1}.R.midthickness.32k_fs_LR.surf.gii \
+			-surface-presmooth ${ss} \
+			-volume-presmooth ${vs} \
+			-average-output"
+		echo $cmd; $cmd; fi
+
+		# Export gradient results
+		if [ ! -f ${workingDir}/${1}/rfMRI_gradient.R.dconn.nii ]; then 
+		cmd="$workbench -cifti-separate ${workingDir}/${1}/rfMRI_gradient.dscalar.nii COLUMN \
+			-metric CORTEX_LEFT ${workingDir}/${1}/rfMRI_gradient.L.metric \
+			-metric CORTEX_RIGHT ${workingDir}/${1}/rfMRI_gradient.R.metric"
+		echo $cmd; $cmd; fi
+		fi
+	fi
+	
+	if [ trans_order="averageTrans"]; then
+		## Create connectivity matrices
+		for REST in REST1 REST2; do
+			for PHASEDIR in RL LR; do
+			## Calculate gradient
+			cmd="$workbench -cifti-correlation-gradient \
+				${datadir}/${1}/MNINonLinear/Results/rfMRI_${REST}_${PHASEDIR}/rfMRI_${REST}_${PHASEDIR}_Atlas.dtseries.nii \
+				${workingDir}/${1}/rfMRI_${REST}_${PHASEDIR}_gradient.dscalar.nii \
+				-left-surface ${datadir}/${1}/MNINonLinear/fsaverage_LR32k/${1}.L.midthickness.32k_fs_LR.surf.gii \
+				-right-surface ${datadir}/${1}/MNINonLinear/fsaverage_LR32k/${1}.R.midthickness.32k_fs_LR.surf.gii \
+				-surface-presmooth ${ss} \
+				-volume-presmooth ${vs} \
+				-surface-exclude ${se} \
+				-volume-exclude ${ve} \
+				-mem-limit ${ml}"
+			echo $cmd
+			$cmd
+			done
+		done
+
+		## Averaging across four gradients
+		cmd="$workbench -cifti-average ${workingDir}/${1}/rfMRI_gradient.dscalar.nii \
+			-cifti ${workingDir}/${1}/rfMRI_REST1_RL_gradient.dscalar.nii \
+			-cifti ${workingDir}/${1}/rfMRI_REST1_LR_gradient.dscalar.nii \
+			-cifti ${workingDir}/${1}/rfMRI_REST2_RL_gradient.dscalar.nii \
+			-cifti ${workingDir}/${1}/rfMRI_REST2_LR_gradient.dscalar.nii"
+		echo $cmd
+		$cmd
+	fi
+}
+
+transition_second(){
+	for HEMI in L R; do
+		if [ ! -f ${workingDir}/${1}/rfMRI_gradient.${HEMI}.nii ]; then 
+		cmd="$workbench -metric-convert -to-nifti \
+			${workingDir}/${1}/rfMRI_gradient.${HEMI}.metric \
+			${workingDir}/${1}/rfMRI_gradient.${HEMI}.nii"
+		echo $cmd; $cmd; fi
+		if [ ! -f ${workingDir}/${1}/rfMRI_gradient.${HEMI}.1D ]; then 
+		3dmaskdump -noijk ${workingDir}/${1}/rfMRI_gradient.${HEMI}.nii >${workingDir}/${1}/rfMRI_gradient.${HEMI}.1D
+		cmd="rm ${workingDir}/${1}/rfMRI_gradient.${HEMI}.metric"
+		echo $cmd; $cmd; fi
+	done
+
+	## Calculate gradient of gradient
+	if [ ! -f ${workingDir}/${1}/rfMRI_gradient2.dscalar.nii ]; then
+	cmd="$workbench -cifti-gradient ${workingDir}/${1}/rfMRI_gradient.dscalar.nii COLUMN ${workingDir}/${1}/rfMRI_gradient2.dscalar.nii\
+		-left-surface ${datadir}/${1}/MNINonLinear/fsaverage_LR32k/${1}.L.midthickness.32k_fs_LR.surf.gii \
+		-right-surface ${datadir}/${1}/MNINonLinear/fsaverage_LR32k/${1}.R.midthickness.32k_fs_LR.surf.gii \
+		-surface-presmooth ${ss}"
+	echo $cmd; $cmd; fi
+
+	# Export gradient-of-gradient results
+	if [ ! -f ${workingDir}/${1}/rfMRI_gradient2.L.dconn.nii ]; then 
+	cmd="$workbench -cifti-separate ${workingDir}/${1}/rfMRI_gradient2.dscalar.nii COLUMN \
+		-metric CORTEX_LEFT ${workingDir}/${1}/rfMRI_gradient2.L.metric \
+		-metric CORTEX_RIGHT ${workingDir}/${1}/rfMRI_gradient2.R.metric"
+	echo $cmd; $cmd; fi
+
+	for HEMI in L R; do
+		if [ ! -f ${workingDir}/${1}/rfMRI_gradient2.${HEMI}.nii ]; then 
+		cmd="$workbench -metric-convert -to-nifti \
+			${workingDir}/${1}/rfMRI_gradient2.${HEMI}.metric \
+			${workingDir}/${1}/rfMRI_gradient2.${HEMI}.nii"
+		echo $cmd; $cmd; fi
+		if [ ! -f ${workingDir}/${1}/rfMRI_gradient2.${HEMI}.1D ]; then 
+		3dmaskdump -noijk ${workingDir}/${1}/rfMRI_gradient2.${HEMI}.nii >${workingDir}/${1}/rfMRI_gradient2.${HEMI}.1D
+		cmd="rm ${workingDir}/${1}/rfMRI_gradient2.${HEMI}.metric"
+		echo $cmd; $cmd; fi
+	done
+}
+
+transition_nki(){
+	smoothing=6
+	freesurferDir=/scr/kalifornien1/data/nki_enhanced/freesurfer
+	export SUBJECTS_DIR=${freesurferDir}
+
+	# prepare subject
+	subjectDir=${workingDir}/${sub}
+	# make dir if not there
+	if [ ! -d "${subjectDir}" ]
+	then
+	    mkdir -pv ${subjectDir}
+	fi
+
+	# Get the files
+	funcPath=/scr/melisse1/NKI_enhanced/results/${sub}/preproc/output/bandpassed/fwhm_0.0/${sub}_r00_afni_bandpassed.nii.gz
+	exampleFunc=/scr/melisse1/NKI_enhanced/results/${sub}/preproc/mean/afni_RfMRI_mx_645tshift.nii.gz
+	bbregFile=/scr/melisse1/NKI_enhanced/results/${sub}/preproc/bbreg/afni_${sub}_register.dat
+	cp -fv ${funcPath} ${subjectDir}/func_preproc.nii.gz
+	cp -fv ${exampleFunc} ${subjectDir}/exampleFunc.nii.gz
+	cp -fv ${bbregFile} ${subjectDir}/bbregister.dat
+
+	# align them
+	mri_vol2vol --mov ${subjectDir}/func_preproc.nii.gz --fstarg --o ${subjectDir}/func_preproc.aligned.nii.gz --no-resample --reg ${subjectDir}/bbregister.dat
+
+	# do the left hemisphere
+	mri_vol2surf \
+	--mov ${subjectDir}/func_preproc.aligned.nii.gz \
+	--reg ${subjectDir}/bbregister.dat \
+	--projfrac-avg 0.2 0.8 0.1 \
+	--trgsubject ${sub} \
+	--interp nearest \
+	--hemi lh \
+	--out ${subjectDir}/${sub}_rs_clean2fssurf_lh.mgh
+
+	mri_surf2surf \
+	--s ${sub} \
+	--sval ${subjectDir}/${sub}_rs_clean2fssurf_lh.mgh \
+	--trgsubject fsaverage5 \
+	--tval ${subjectDir}/${sub}_lh2fsaverage5.nii \
+	--hemi lh \
+	--cortex \
+	--noreshape
+	# --fwhm-src 6 \
+
+	# Get the curvature file into template space
+	mri_surf2surf \
+	--s ${sub} \
+	--sval ${freesurferDir}/${sub}/surf/lh.curv \
+	--trgsubject fsaverage5 \
+	--tval ${subjectDir}/curv_${sub}_lh2fsaverage5_${smoothing}.mgh \
+	--fwhm-src ${smoothing} \
+	--hemi lh \
+	--cortex \
+	--noreshape
+
+	# and the thickness too
+	mri_surf2surf \
+	--s ${sub} \
+	--sval ${freesurferDir}/${sub}/surf/lh.thickness \
+	--trgsubject fsaverage5 \
+	--tval ${subjectDir}/thickness_${sub}_lh2fsaverage5_${smoothing}.mgh \
+	--fwhm-src ${smoothing}
+	--hemi lh \
+	--cortex \
+	--noreshape
+
+	# and sulci
+	mri_surf2surf \
+	--s ${sub} \
+	--sval ${freesurferDir}/${sub}/surf/lh.sulc \
+	--trgsubject fsaverage5 \
+	--tval ${subjectDir}/sulc_${sub}_lh2fsaverage5_${smoothing}.mgh \
+	--fwhm-src ${smoothing} \
+	--hemi lh \
+	--cortex \
+	--noreshape
+
+	# do the right hemisphere
+	mri_vol2surf \
+	--mov ${subjectDir}/func_preproc.aligned.nii.gz \
+	--reg ${subjectDir}/bbregister.dat \
+	--projfrac-avg 0.2 0.8 0.1 \
+	--trgsubject ${sub} \
+	--interp nearest \
+	--hemi rh \
+	--out ${subjectDir}/${sub}_rs_clean2fssurf_rh.mgh
+
+	mri_surf2surf \
+	--s ${sub} \
+	--sval ${subjectDir}/${sub}_rs_clean2fssurf_rh.mgh \
+	--trgsubject fsaverage5 \
+	--tval ${subjectDir}/${sub}_rh2fsaverage5.nii \
+	--hemi rh \
+	--cortex \
+	--noreshape
+	# --fwhm-src 6 \
+
+	# Get the curvature file into template space
+	mri_surf2surf \
+	--s ${sub} \
+	--sval ${freesurferDir}/${sub}/surf/rh.curv \
+	--trgsubject fsaverage5 \
+	--tval ${subjectDir}/curv_${sub}_rh2fsaverage5_${smoothing}.mgh \
+	--fwhm-src ${smoothing} \
+	--hemi rh \
+	--cortex \
+	--noreshape
+
+	# and the thickness too
+	mri_surf2surf \
+	--s ${sub} \
+	--sval ${freesurferDir}/${sub}/surf/rh.thickness \
+	--trgsubject fsaverage5 \
+	--tval ${subjectDir}/thickness_${sub}_rh2fsaverage5_${smoothing}.mgh \
+	--fwhm-src ${smoothing} \
+	--hemi rh \
+	--cortex \
+	--noreshape
+
+	# and  sulci
+	mri_surf2surf \
+	--s ${sub} \
+	--sval ${freesurferDir}/${sub}/surf/rh.sulc \
+	--trgsubject fsaverage5 \
+	--tval ${subjectDir}/sulc_${sub}_rh2fsaverage5_${smoothing}.mgh \
+	--fwhm-src ${smoothing} \
+	--hemi rh \
+	--cortex \
+	--noreshape
+
+	# Get files into the correct format
+	# Left
+	mris_convert ${SUBJECTS_DIR}/fsaverage5/surf/lh.inflated ${subjectDir}/fsaverage5.lh.inflated.gii
+	${wb} -metric-convert -from-nifti ${subjectDir}/${sub}_lh2fsaverage5.nii ${subjectDir}/fsaverage5.lh.inflated.gii ${subjectDir}/lh_${sub}_metric.metric
+
+	# Right
+	mris_convert ${SUBJECTS_DIR}/fsaverage5/surf/rh.inflated ${subjectDir}/fsaverage5.rh.inflated.gii
+	${wb} -metric-convert -from-nifti ${subjectDir}/${sub}_rh2fsaverage5.nii ${subjectDir}/fsaverage5.rh.inflated.gii ${subjectDir}/rh_${sub}_metric.metric
+
+	# Make cifti timeseries
+	${wb} -cifti-create-dense-timeseries ${subjectDir}/${sub}.dtseries.nii -left-metric ${subjectDir}/lh_${sub}_metric.metric -right-metric ${subjectDir}/rh_${sub}_metric.metric -timestep 0.645
+
+	# make cifti fcon gradient
+	${wb} -cifti-correlation-gradient ${subjectDir}/${sub}.dtseries.nii ${subjectDir}/${sub}.gradient.dscalar.nii -left-surface ${subjectDir}/fsaverage5.lh.inflated.gii -right-surface ${subjectDir}/fsaverage5.rh.inflated.gii -surface-presmooth ${smoothing} -surface-exclude 10 -mem-limit 6
+
+	# split up cifti
+	${wb} -cifti-separate ${subjectDir}/${sub}.gradient.dscalar.nii COLUMN -metric CORTEX_LEFT ${subjectDir}/${sub}_rfMRI_gradient.L.metric -metric CORTEX_RIGHT ${subjectDir}/${sub}_rfMRI_gradient.R.metric
+
+	# Convert the stuff into 1D LEFT
+	${wb} -metric-convert -to-nifti ${subjectDir}/${sub}_rfMRI_gradient.L.metric ${subjectDir}/${sub}_rfMRI_gradient.L.nii
+	3dmaskdump -noijk -o ${subjectDir}/${sub}_rfMRI_gradient.L.1D ${subjectDir}/${sub}_rfMRI_gradient.L.nii
+	# Get rid of the metric thing
+	rm ${subjectDir}/${sub}_rfMRI_gradient.L.metric -rf
+
+	# Convert the stuff into 1D RIGHT
+	${wb} -metric-convert -to-nifti ${subjectDir}/${sub}_rfMRI_gradient.R.metric ${subjectDir}/${sub}_rfMRI_gradient.R.nii
+	3dmaskdump -noijk -o ${subjectDir}/${sub}_rfMRI_gradient.R.1D ${subjectDir}/${sub}_rfMRI_gradient.R.nii
+	# Get rid of the metric thing
+	rm ${subjectDir}/${sub}_rfMRI_gradient.R.metric -rf
+}
+
+cleanup(){
+	## Clean up unnecessary files:
+	if [ -f ${workingDir}/${1}/rfMRI_REST.dconn.nii ]; then
+	cmd="rm -f ${workingDir}/${1}/rfMRI_REST_z.dconn.nii \
+		${workingDir}/${1}/rfMRI_REST?_??.dconn.nii \
+		${workingDir}/${1}/rfMRI_REST?_??_Atlas.dtseries.*.metric.*"
+	echo $cmd; $cmd; fi
+	#if [ -f ${workingDir}/${1}/rfMRI_gradient.dscalar.nii ]; then
+	#cmd="rm -f ${workingDir}/${1}/rfMRI_REST.dconn.nii"
+	#echo $cmd; $cmd; fi
+}
