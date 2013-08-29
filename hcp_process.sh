@@ -37,32 +37,39 @@ ml=40 	# mem-limit
 
 while getopts ':hkdwrpcgtTcxs:' option; do
   case "$option" in
-    h) 	echo "$usage"
-       	exit
-       	;;
-		k) workbench=$OPTARG
-    d) 	dir=$OPTARG
-       	;;
-		w) 	workingDir=$OPTARG
-				;;
-		r)	datadir=${dir}/$OPTARG
-		p)	echo "Preprocessing"
-				preprocessing
-		c) 	echo "Creating connectivity matrix"
-				connectivity
-		g)	echo "Creating glyphsets"
-				glyphsets
-		t)	echo "Creating transition maps"
-				trans_order=$OPTARG
-				transition
-		T)	echo "Creating second transition maps"
-				transition_second
-		K)	echo "Creating transition maps for NKI_Enhanced data"
-						transition_nki
-		x)	echo "removing unnecessary files"
-				cleanup
-		s)	echo "processing subject: $OPTARG"
-				sub=$OPTARG
+	h) 	echo "$usage"
+       		exit
+       		;;
+	k) 	workbench=$OPTARG
+    	d) 	dir=$OPTARG
+       		;;
+	w) 	workingDir=$OPTARG
+		;;
+	r)	datadir=${dir}/$OPTARG
+	p)	echo "Preprocessing"
+		preprocessing
+	c) 	echo "Creating connectivity matrix"
+		connectivity
+		;;
+	g)	echo "Creating glyphsets"
+		glyphsets
+		;;
+	t)	echo "Creating transition maps"
+		trans_order=$OPTARG
+		transition
+		;;
+	T)	echo "Creating second transition maps"
+		transition_second
+		;;
+	K)	echo "Creating transition maps for NKI_Enhanced data"
+		transition_nki
+		;;
+	x)	echo "removing unnecessary files"
+		cleanup
+		;;
+	s)	echo "processing subject: $OPTARG"
+		sub=$OPTARG
+		;;
     :) 	printf "missing argument for -%s\n" "$OPTARG" >&2
        	echo "$usage" >&2
        	exit 1
@@ -218,24 +225,31 @@ glyphsets(){
 			echo $cmd; $cmd; fi
 		done
 	done 
-	
-	preprocess
-	
-	correlation
+	if [ ! -f ${workingDir}/${sub}/rfMRI_${REST}_${PHASE}_preproc.ss.dtseries.nii ]; then
+		echo "Preprocessing first"
+		preprocess
+	fi
+	if [ ! -f ${workingDir}/${sub}/rfMRI_REST.dconn.nii ]; then
+		echo "Calculating correlation matrix"
+		correlation
+	fi
 }
 
 #########################################################
 #################### TRANSITION #########################
 #########################################################
 transition(){
+	if [ ! -f ${workingDir}/${sub}/rfMRI_gradient.dscalar.nii ]; then 
 	
-	preprocess
-	
+	if [ ! -f ${workingDir}/${sub}/rfMRI_${REST}_${PHASE}_preproc.ss.dtseries.nii ]; then
+		echo "Preprocessing first"
+		preprocess
+	fi
 	if [ trans_order="averageConn"; then
-		## Calculate gradient
-		if [ ! -f ${workingDir}/${sub}/rfMRI_gradient.dscalar.nii ]; then 
-		connectivity
-		
+		if [ ! -f ${workingDir}/${sub}/rfMRI_REST.dconn.nii ]; then
+		echo "Calculating correlation matrix"
+		correlation
+		fi
 		cmd="$workbench -cifti-gradient ${workingDir}/${sub}/rfMRI_REST.dconn.nii ROW ${workingDir}/${sub}/rfMRI_gradient.dscalar.nii \
 			-left-surface ${datadir}/${sub}/MNINonLinear/fsaverage_LR32k/${sub}.L.midthickness.32k_fs_LR.surf.gii \
 			-right-surface ${datadir}/${sub}/MNINonLinear/fsaverage_LR32k/${sub}.R.midthickness.32k_fs_LR.surf.gii \
