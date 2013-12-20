@@ -1,6 +1,6 @@
 function ranknormalize(filename,outname)
 % normalizes binary connectivity matrices by sorting (ranking)
-% reads: filename, outputs: outname
+% reads from disk a file named filename, outputs to the disk a file named outname
 
 fileInfo = dir(filename);
 fileSize = fileInfo.bytes;
